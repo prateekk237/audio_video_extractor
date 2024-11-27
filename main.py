@@ -77,7 +77,7 @@ if uploaded_file is not None:
 
         with st.spinner("Loading Whisper model... ⏳"):
             st.write(f"Selected model: {model_choice}")
-            model = whisper.load_model(model_choice, device="cpu")  # Force CPU to avoid FP16 error or for GPU use "cuda"
+            model = whisper.load_model(model_choice, device="cuda")  # Force CPU to avoid FP16 error or for GPU use "cuda"
 
         with st.spinner("Transcribing the video... 📝"):
             transcription = model.transcribe(temp_file_path)
