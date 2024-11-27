@@ -32,7 +32,7 @@ if uploaded_file is not None:
     # Persistent model selection dropdown
     model_choice = st.selectbox(
         "Select Model 🙂",
-        ["Select Model 🙂", "tiny", "base", "small", "medium", "large"],
+        ["Select Model 🙂", "tiny", "base", "small", "medium"],
         key="model_choice"
     )
 
