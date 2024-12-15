@@ -6,7 +6,7 @@ import ffmpeg
 import subprocess
 
 # Adjust the upload file limit
-st.set_option("server.maxUploadSize", 300)
+#st.set_option("server.maxUploadSize", 300)
 
 # Title
 st.title("🎥 Video Transcription and 🎵 Audio Extraction")
