@@ -3,111 +3,70 @@ import whisper
 import tempfile
 import os
 import ffmpeg
-import uuid
+from pytube import YouTube
 
-# Title of the app
+# Adjust the upload file limit
+st.set_option("server.maxUploadSize", 300)
+
+# Title
 st.title("🎥 Video Transcription and 🎵 Audio Extraction")
 
-# File upload
-uploaded_file = st.file_uploader("Upload a video file", type=["mp4", "mkv", "avi", "mov", "flv"])
+# File uploader or YouTube link
+upload_option = st.radio("Select Input Type", ["Upload File", "YouTube Link"])
+uploaded_file = None
+youtube_link = None
 
-if uploaded_file is not None:
-    # Display file details
-    st.write(f"Uploaded file: {uploaded_file.name}")
+if upload_option == "Upload File":
+    uploaded_file = st.file_uploader("Upload a video file", type=["mp4", "mkv", "avi", "mov", "flv"])
+else:
+    youtube_link = st.text_input("Paste YouTube link here")
 
-    # Save uploaded file temporarily
+# Temporary file storage
+temp_file_path = None
+if uploaded_file:
     with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(uploaded_file.name)[1]) as temp_file:
         temp_file.write(uploaded_file.read())
         temp_file_path = temp_file.name
 
-    # Create horizontal buttons with emojis
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        audio_button = st.button("🎵 Extract Audio")
-    with col2:
-        video_button = st.button("🎥 Transcribe Video")
-    with col3:
-        both_button = st.button("🎵🎥 Both Actions")
-
-    # Persistent model selection dropdown
-    model_choice = st.selectbox(
-        "Select Model 🙂",
-        ["Select Model 🙂", "tiny", "base", "small", "medium"],
-        key="model_choice"
-    )
-
-
-    def extract_audio(temp_file_path):
+if youtube_link:
+    if st.button("Download YouTube Video"):
         try:
-            # Check if the video file has an audio stream
-            probe = ffmpeg.probe(temp_file_path)
-            audio_streams = [stream for stream in probe.get('streams', []) if stream.get('codec_type') == 'audio']
-            if not audio_streams:
-                st.error("The uploaded file does not contain an audio stream. Please upload a valid video with audio.")
-                return
+            yt = YouTube(youtube_link)
+            video_stream = yt.streams.filter(file_extension="mp4").first()
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_file:
+                video_stream.download(filename=temp_file.name)
+                temp_file_path = temp_file.name
+            st.success("YouTube video downloaded successfully!")
+        except Exception as e:
+            st.error(f"Failed to download video: {e}")
 
-            with st.spinner("Extracting audio... 🎵"):
-                # Generate a unique file name for the output
-                unique_id = str(uuid.uuid4())
-                audio_output_path = os.path.join(tempfile.gettempdir(), f"{unique_id}.mp3")
+# Audio and video extraction buttons
+audio_button = st.button("🎵 Extract Audio")
+video_button = st.button("🎥 Transcribe Video")
+both_button = st.button("🎵🎥 Extract Both")
 
-                # Run FFmpeg command for audio extraction
-                ffmpeg.input(temp_file_path).output(audio_output_path, format='mp3', audio_bitrate='192k').run()
+if temp_file_path:
+    if audio_button or both_button:
+        # Extract Audio
+        try:
+            audio_output_path = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3").name
+            ffmpeg.input(temp_file_path).output(audio_output_path, format='mp3', audio_bitrate='192k').run(overwrite_output=True)
+            st.success("Audio extraction successful!")
+            st.audio(audio_output_path)
+            with open(audio_output_path, "rb") as audio_file:
+                st.download_button("Download Audio", data=audio_file, file_name="extracted_audio.mp3", mime="audio/mp3")
+        except ffmpeg.Error as e:
+            st.error("There is no audio in the input video. Please check the file.")
 
-                st.success("Audio extracted successfully! 🎶")
-                st.audio(audio_output_path)
-                st.download_button(
-                    label="Download Audio",
-                    data=open(audio_output_path, "rb").read(),
-                    file_name="extracted_audio.mp3",
-                    mime="audio/mp3"
-                )
-
-                # Clean up temporary audio file
-                os.remove(audio_output_path)
-        except ffmpeg._run.Error as e:
-            st.error("Audio extraction failed. Please check the file format or try again.")
-            st.text(e.stderr)  # Print FFmpeg error for debugging
-
-
-    def transcribe_video(temp_file_path, model_choice):
-        if model_choice == "Select Model 🙂":
-            st.error("Please select a valid model to proceed.")
-            return
-
-        with st.spinner("Loading Whisper model... ⏳"):
+    if video_button or both_button:
+        # Transcribe Video
+        model_choice = st.selectbox("Select Whisper Model", ["tiny", "base", "small", "medium", "large"])
+        if model_choice:
             st.write(f"Selected model: {model_choice}")
-            model = whisper.load_model(model_choice)  # device="cpu" Force CPU to avoid FP16 error or for GPU use "cuda"
-
-        with st.spinner("Transcribing the video... 📝"):
+            st.write("Loading Whisper model...")
+            model = whisper.load_model(model_choice)
+            st.write("Transcribing the video...")
             transcription = model.transcribe(temp_file_path)
-            st.success("Transcription complete! ✅")
-
-            # Display formatted transcript
-            st.subheader("Transcript")
-            formatted_text = "\n".join(transcription["text"].split(". "))  # Split sentences by period
-            st.text_area("Transcript", formatted_text, height=300)
-
-            # Option to download the transcript
-            if st.download_button(
-                    label="Download Transcript",
-                    data=formatted_text,
-                    file_name="transcript.txt",
-                    mime="text/plain"
-            ):
-                st.experimental_rerun()  # Re-run the app to reset model selection
-
-
-    if audio_button:
-        extract_audio(temp_file_path)
-
-    if video_button:
-        transcribe_video(temp_file_path, model_choice)
-
-    if both_button:
-        # Perform both actions
-        extract_audio(temp_file_path)
-        transcribe_video(temp_file_path, model_choice)
-
-    # Cleanup temporary file
-    os.remove(temp_file_path)
+            st.success("Transcription complete!")
+            st.text_area("Transcript", transcription["text"], height=300)
+            st.download_button("Download Transcript", data=transcription["text"], file_name="transcript.txt", mime="text/plain")
