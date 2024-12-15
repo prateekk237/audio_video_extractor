@@ -6,8 +6,8 @@ import ffmpeg
 from pytube import YouTube
 
 # Adjust the maximum file upload size (e.g., 200 MB)
-MAX_UPLOAD_SIZE_MB = 3024  # Set desired file upload size limit
-st.set_option("server.maxUploadSize", MAX_UPLOAD_SIZE_MB)
+#MAX_UPLOAD_SIZE_MB = 3024  # Set desired file upload size limit
+#st.set_option("server.maxUploadSize", MAX_UPLOAD_SIZE_MB)
 
 # Title of the app
 st.title("Video & Audio Extractor with YouTube Integration")
