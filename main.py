@@ -3,10 +3,10 @@ import whisper
 import tempfile
 import os
 import ffmpeg
-from pytube import YouTube
+import subprocess
 
 # Adjust the upload file limit
-#st.set_option("server.maxUploadSize", 300)
+st.set_option("server.maxUploadSize", 300)
 
 # Title
 st.title("🎥 Video Transcription and 🎵 Audio Extraction")
@@ -31,14 +31,21 @@ if uploaded_file:
 if youtube_link:
     if st.button("Download YouTube Video"):
         try:
-            yt = YouTube(youtube_link)
-            video_stream = yt.streams.filter(file_extension="mp4").first()
             with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_file:
-                video_stream.download(filename=temp_file.name)
                 temp_file_path = temp_file.name
+                # Use yt-dlp to download the video
+                command = [
+                    "yt-dlp",
+                    "-f", "mp4",
+                    youtube_link,
+                    "-o", temp_file_path
+                ]
+                subprocess.run(command, check=True)
             st.success("YouTube video downloaded successfully!")
-        except Exception as e:
+        except subprocess.CalledProcessError as e:
             st.error(f"Failed to download video: {e}")
+        except Exception as e:
+            st.error(f"An unexpected error occurred: {e}")
 
 # Audio and video extraction buttons
 audio_button = st.button("🎵 Extract Audio")
