@@ -6,7 +6,7 @@ import ffmpeg
 import subprocess
 
 # Adjust the upload file limit
-#st.set_option("server.maxUploadSize", 300)
+st.set_option("server.maxUploadSize", 300)
 
 # Title
 st.title("🎥 Video Transcription and 🎵 Audio Extraction")
@@ -26,7 +26,7 @@ if upload_option == "Upload File":
 # Handling YouTube link
 elif upload_option == "YouTube Link":
     youtube_link = st.text_input("Paste YouTube link here")
-    if youtube_link and st.button("Download YouTube Video"):
+    if youtube_link:
         try:
             with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_file:
                 temp_file_path = temp_file.name
@@ -38,14 +38,15 @@ elif upload_option == "YouTube Link":
                     "-o", temp_file_path
                 ]
                 subprocess.run(command, check=True)
-            st.success("YouTube video downloaded successfully!")
+                st.success("YouTube video processed successfully!")
         except subprocess.CalledProcessError as e:
-            st.error(f"Failed to download video: {e}")
+            st.error(f"Failed to process video: {e}")
         except Exception as e:
             st.error(f"An unexpected error occurred: {e}")
 
 # Audio and transcription options
 if temp_file_path:
+    st.subheader("Choose What to Extract:")
     audio_button = st.button("🎵 Extract Audio")
     video_button = st.button("🎥 Transcribe Video")
     both_button = st.button("🎵🎥 Extract Both")
@@ -59,9 +60,9 @@ if temp_file_path:
             st.audio(audio_output_path)
             with open(audio_output_path, "rb") as audio_file:
                 st.download_button(
-                    "Download Audio", 
-                    data=audio_file, 
-                    file_name="extracted_audio.mp3", 
+                    "Download Audio",
+                    data=audio_file,
+                    file_name="extracted_audio.mp3",
                     mime="audio/mp3"
                 )
         except ffmpeg.Error:
@@ -79,9 +80,9 @@ if temp_file_path:
             st.success("Transcription complete!")
             st.text_area("Transcript", transcription["text"], height=300)
             st.download_button(
-                "Download Transcript", 
-                data=transcription["text"], 
-                file_name="transcript.txt", 
+                "Download Transcript",
+                data=transcription["text"],
+                file_name="transcript.txt",
                 mime="text/plain"
             )
 
