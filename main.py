@@ -15,32 +15,35 @@ youtube_url = st.text_input("Enter YouTube Video URL")
 # File upload (disabled if YouTube URL is used)
 uploaded_file = st.file_uploader("Upload a video file", type=["mp4", "mkv", "avi", "mov", "flv"])
 
+# Function to download YouTube video
+def download_youtube_video(url):
+    try:
+        # Using yt-dlp to download the best quality video
+        ydl_opts = {
+            'format': 'best',
+            'outtmpl': tempfile.mktemp(suffix=".mp4"),  # Save temp video file
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info_dict = ydl.extract_info(url, download=True)
+            video_path = ydl.prepare_filename(info_dict)  # Get the video path
+        return video_path
+    except Exception as e:
+        st.error(f"Failed to download the video: {e}")
+        return None
+
 # Temporary video file path
 temp_file_path = None
 
-if youtube_url:
-    # Download YouTube video
+# Video Download Button
+if youtube_url and st.button("📥 Download Video"):
     with st.spinner("Downloading video from YouTube... ⏳"):
-        try:
-            # Using yt-dlp to download the best quality video
-            ydl_opts = {
-                'format': 'best',
-                'outtmpl': tempfile.mktemp(suffix=".mp4"),  # Save temp video file
-            }
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info_dict = ydl.extract_info(youtube_url, download=True)
-                temp_file_path = ydl.prepare_filename(info_dict)  # Get the video path
-            st.success(f"Video downloaded successfully! 🎥")
-        except Exception as e:
-            st.error(f"Failed to download the video: {e}")
-else:
-    if uploaded_file is not None:
-        # Save uploaded file temporarily
-        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(uploaded_file.name)[1]) as temp_file:
-            temp_file.write(uploaded_file.read())
-            temp_file_path = temp_file.name
+        temp_file_path = download_youtube_video(youtube_url)
+        if temp_file_path:
+            st.success("Video downloaded successfully! 🎥")
+            st.video(temp_file_path)
 
-if temp_file_path:
+# Process buttons (Extract Audio, Transcribe, Both)
+if youtube_url or uploaded_file:
     # Create horizontal buttons with emojis
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -57,14 +60,23 @@ if temp_file_path:
         key="model_choice"
     )
 
+    # Determine input source
+    if uploaded_file:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(uploaded_file.name)[1]) as temp_file:
+            temp_file.write(uploaded_file.read())
+            temp_file_path = temp_file.name
+    elif youtube_url and (audio_button or video_button or both_button):
+        with st.spinner("Downloading video from YouTube... ⏳"):
+            temp_file_path = download_youtube_video(youtube_url)
 
+    # Functions for processing
     def extract_audio(temp_file_path):
         try:
             # Check if the video file has an audio stream
             probe = ffmpeg.probe(temp_file_path)
             audio_streams = [stream for stream in probe.get('streams', []) if stream.get('codec_type') == 'audio']
             if not audio_streams:
-                st.error("The uploaded file does not contain an audio stream. Please upload a valid video with audio.")
+                st.error("The video has no audio stream. Please try a different video.")
                 return
 
             with st.spinner("Extracting audio... 🎵"):
@@ -98,7 +110,7 @@ if temp_file_path:
 
         with st.spinner("Loading Whisper model... ⏳"):
             st.write(f"Selected model: {model_choice}")
-            model = whisper.load_model(model_choice)  # device="cpu" Force CPU to avoid FP16 error or for GPU use "cuda"
+            model = whisper.load_model(model_choice)  # Use "cuda" for GPU or "cpu" for CPU
 
         with st.spinner("Transcribing the video... 📝"):
             transcription = model.transcribe(temp_file_path)
@@ -119,16 +131,17 @@ if temp_file_path:
                 st.experimental_rerun()  # Re-run the app to reset model selection
 
 
-    if audio_button:
-        extract_audio(temp_file_path)
+    if temp_file_path:
+        if audio_button:
+            extract_audio(temp_file_path)
 
-    if video_button:
-        transcribe_video(temp_file_path, model_choice)
+        if video_button:
+            transcribe_video(temp_file_path, model_choice)
 
-    if both_button:
-        # Perform both actions
-        extract_audio(temp_file_path)
-        transcribe_video(temp_file_path, model_choice)
+        if both_button:
+            # Perform both actions
+            extract_audio(temp_file_path)
+            transcribe_video(temp_file_path, model_choice)
 
-    # Cleanup temporary file
-    os.remove(temp_file_path)
+        # Cleanup temporary file
+        os.remove(temp_file_path)
