@@ -5,110 +5,68 @@ import os
 import ffmpeg
 from pytube import YouTube
 
-# Adjust the maximum file upload size (e.g., 200 MB)
-#MAX_UPLOAD_SIZE_MB = 3024  # Set desired file upload size limit
-#st.set_option("server.maxUploadSize", MAX_UPLOAD_SIZE_MB)
+# Adjust the upload file limit
+#st.set_option("server.maxUploadSize", 300)
 
-# Title of the app
-st.title("Video & Audio Extractor with YouTube Integration")
+# Title
+st.title("🎥 Video Transcription and 🎵 Audio Extraction")
 
-# Option to upload a file or provide a YouTube link
-st.sidebar.header("Input Options")
-input_option = st.sidebar.radio("Choose your input method", ["Upload Video File", "YouTube Link"])
+# File uploader or YouTube link
+upload_option = st.radio("Select Input Type", ["Upload File", "YouTube Link"])
+uploaded_file = None
+youtube_link = None
 
-# Initialize session state for model choice
-if "model_choice" not in st.session_state:
-    st.session_state.model_choice = "Select Model 🙂"
-
-# Define the process to download YouTube videos
-def download_youtube_video(youtube_url):
-    try:
-        yt = YouTube(youtube_url)
-        video_stream = yt.streams.filter(progressive=True, file_extension="mp4").get_highest_resolution()
-        temp_dir = tempfile.TemporaryDirectory()
-        video_path = os.path.join(temp_dir.name, f"{yt.title}.mp4")
-        video_stream.download(output_path=temp_dir.name, filename=f"{yt.title}.mp4")
-        return video_path, temp_dir
-    except Exception as e:
-        st.error(f"Failed to download YouTube video: {e}")
-        return None, None
-
-# File or YouTube video input
-temp_file_path = None
-temp_dir = None
-
-if input_option == "Upload Video File":
+if upload_option == "Upload File":
     uploaded_file = st.file_uploader("Upload a video file", type=["mp4", "mkv", "avi", "mov", "flv"])
-    if uploaded_file is not None:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(uploaded_file.name)[1]) as temp_file:
-            temp_file.write(uploaded_file.read())
-            temp_file_path = temp_file.name
+else:
+    youtube_link = st.text_input("Paste YouTube link here")
 
-elif input_option == "YouTube Link":
-    youtube_url = st.text_input("Paste the YouTube link here")
-    if st.button("Download Video"):
-        if youtube_url:
-            temp_file_path, temp_dir = download_youtube_video(youtube_url)
-            if temp_file_path:
-                st.success("YouTube video downloaded successfully!")
-                st.video(temp_file_path)
-        else:
-            st.warning("Please provide a valid YouTube link.")
+# Temporary file storage
+temp_file_path = None
+if uploaded_file:
+    with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(uploaded_file.name)[1]) as temp_file:
+        temp_file.write(uploaded_file.read())
+        temp_file_path = temp_file.name
 
-# Add buttons for audio and video extraction
-st.subheader("Choose Extraction Method")
+if youtube_link:
+    if st.button("Download YouTube Video"):
+        try:
+            yt = YouTube(youtube_link)
+            video_stream = yt.streams.filter(file_extension="mp4").first()
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_file:
+                video_stream.download(filename=temp_file.name)
+                temp_file_path = temp_file.name
+            st.success("YouTube video downloaded successfully!")
+        except Exception as e:
+            st.error(f"Failed to download video: {e}")
+
+# Audio and video extraction buttons
 audio_button = st.button("🎵 Extract Audio")
 video_button = st.button("🎥 Transcribe Video")
 both_button = st.button("🎵🎥 Extract Both")
 
-# Handle audio extraction
-if audio_button or both_button:
-    if temp_file_path:
-        st.info("Extracting audio...")
+if temp_file_path:
+    if audio_button or both_button:
+        # Extract Audio
         try:
-            audio_output_path = os.path.join(tempfile.gettempdir(), f"audio_{os.path.basename(temp_file_path)}.mp3")
-            ffmpeg.input(temp_file_path).output(audio_output_path, format="mp3", audio_bitrate="192k").run()
-            st.success("Audio extraction complete!")
+            audio_output_path = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3").name
+            ffmpeg.input(temp_file_path).output(audio_output_path, format='mp3', audio_bitrate='192k').run(overwrite_output=True)
+            st.success("Audio extraction successful!")
             st.audio(audio_output_path)
-            st.download_button(
-                label="Download Audio",
-                data=open(audio_output_path, "rb").read(),
-                file_name="extracted_audio.mp3",
-                mime="audio/mp3",
-            )
-        except Exception as e:
-            st.error(f"Audio extraction failed: {e}")
-    else:
-        st.warning("No video file available for audio extraction!")
+            with open(audio_output_path, "rb") as audio_file:
+                st.download_button("Download Audio", data=audio_file, file_name="extracted_audio.mp3", mime="audio/mp3")
+        except ffmpeg.Error as e:
+            st.error("There is no audio in the input video. Please check the file.")
 
-# Handle video transcription
-if video_button or both_button:
-    if temp_file_path:
-        # Show model selection dropdown only when video/both is clicked
-        st.subheader("Select Whisper Model")
-        st.session_state.model_choice = st.selectbox(
-            "Select Model 🙂",
-            ["Select Model 🙂", "tiny", "base", "small", "medium", "large"],
-            key="model_choice",
-        )
-        if st.session_state.model_choice != "Select Model 🙂":
-            st.info(f"Transcribing video using model: {st.session_state.model_choice}")
-            try:
-                model = whisper.load_model(st.session_state.model_choice, device="cpu")  # Explicitly use CPU
-                transcription = model.transcribe(temp_file_path)
-                st.success("Transcription complete!")
-                st.text_area("Transcript", transcription["text"], height=300)
-                st.download_button(
-                    label="Download Transcript",
-                    data=transcription["text"],
-                    file_name="transcript.txt",
-                    mime="text/plain",
-                )
-            except Exception as e:
-                st.error(f"Video transcription failed: {e}")
-    else:
-        st.warning("No video file available for transcription!")
-
-# Cleanup temporary files
-if temp_dir:
-    temp_dir.cleanup()
+    if video_button or both_button:
+        # Transcribe Video
+        model_choice = st.selectbox("Select Whisper Model", ["tiny", "base", "small", "medium", "large"])
+        if model_choice:
+            st.write(f"Selected model: {model_choice}")
+            st.write("Loading Whisper model...")
+            model = whisper.load_model(model_choice)
+            st.write("Transcribing the video...")
+            transcription = model.transcribe(temp_file_path)
+            st.success("Transcription complete!")
+            st.text_area("Transcript", transcription["text"], height=300)
+            st.download_button("Download Transcript", data=transcription["text"], file_name="transcript.txt", mime="text/plain")
