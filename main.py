@@ -46,45 +46,59 @@ elif upload_option == "YouTube Link":
 
 # Audio and transcription options
 if temp_file_path:
-    st.subheader("Choose What to Extract:")
-    audio_button = st.button("🎵 Extract Audio")
-    video_button = st.button("🎥 Transcribe Video")
-    both_button = st.button("🎵🎥 Extract Both")
+    try:
+        # Test video file validity using ffprobe
+        probe = ffmpeg.probe(temp_file_path)
+        if 'streams' not in probe:
+            raise ValueError("Invalid video file: No streams detected.")
 
-    # Audio extraction
-    if audio_button or both_button:
-        try:
-            audio_output_path = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3").name
-            ffmpeg.input(temp_file_path).output(audio_output_path, format='mp3', audio_bitrate='192k').run(overwrite_output=True)
-            st.success("Audio extraction successful!")
-            st.audio(audio_output_path)
-            with open(audio_output_path, "rb") as audio_file:
+        # Options for audio and transcription
+        st.subheader("Choose What to Extract:")
+        audio_button = st.button("🎵 Extract Audio")
+        video_button = st.button("🎥 Transcribe Video")
+        both_button = st.button("🎵🎥 Extract Both")
+
+        # Audio extraction
+        if audio_button or both_button:
+            try:
+                audio_output_path = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3").name
+                ffmpeg.input(temp_file_path).output(audio_output_path, format='mp3', audio_bitrate='192k').run(overwrite_output=True)
+                st.success("Audio extraction successful!")
+                st.audio(audio_output_path)
+                with open(audio_output_path, "rb") as audio_file:
+                    st.download_button(
+                        "Download Audio",
+                        data=audio_file,
+                        file_name="extracted_audio.mp3",
+                        mime="audio/mp3"
+                    )
+            except ffmpeg.Error:
+                st.error("No audio found in the input video. Please check the file or link.")
+
+        # Transcription
+        if video_button or both_button:
+            model_choice = st.selectbox("Select Whisper Model", ["tiny", "base", "small", "medium", "large"])
+            if model_choice:
+                st.write(f"Selected model: {model_choice}")
+                st.write("Loading Whisper model...")
+                model = whisper.load_model(model_choice)
+                st.write("Transcribing the video...")
+                transcription = model.transcribe(temp_file_path)
+                st.success("Transcription complete!")
+                st.text_area("Transcript", transcription["text"], height=300)
                 st.download_button(
-                    "Download Audio",
-                    data=audio_file,
-                    file_name="extracted_audio.mp3",
-                    mime="audio/mp3"
+                    "Download Transcript",
+                    data=transcription["text"],
+                    file_name="transcript.txt",
+                    mime="text/plain"
                 )
-        except ffmpeg.Error:
-            st.error("No audio found in the input video. Please check the file or link.")
 
-    # Transcription
-    if video_button or both_button:
-        model_choice = st.selectbox("Select Whisper Model", ["tiny", "base", "small", "medium", "large"])
-        if model_choice:
-            st.write(f"Selected model: {model_choice}")
-            st.write("Loading Whisper model...")
-            model = whisper.load_model(model_choice)
-            st.write("Transcribing the video...")
-            transcription = model.transcribe(temp_file_path)
-            st.success("Transcription complete!")
-            st.text_area("Transcript", transcription["text"], height=300)
-            st.download_button(
-                "Download Transcript",
-                data=transcription["text"],
-                file_name="transcript.txt",
-                mime="text/plain"
-            )
+    except ValueError as e:
+        st.error(f"File validation error: {e}")
+    except ffmpeg.Error as e:
+        st.error("Error processing the video file. Please check the input file or link.")
+    except Exception as e:
+        st.error(f"An unexpected error occurred: {e}")
 
 # Cleanup temporary files after app restart
 if st.button("Cleanup Temporary Files"):
